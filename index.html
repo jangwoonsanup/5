@@ -1,1 +1,544 @@
 
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>장운산업 5공장 현장 시스템</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+    <style>
+        body { font-family: 'Malgun Gothic', sans-serif; background-color: #f1f5f9; margin: 0; padding: 20px; color: #1e293b; }
+        
+        .login-wrapper { display: flex; justify-content: center; align-items: center; min-height: 80vh; flex-direction: column; background: linear-gradient(135deg, #0f172a 0%, #047857 50%, #10b981 100%); position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 9999; }
+        .login-card { background: white; padding: 40px; border-radius: 20px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); width: 100%; max-width: 400px; text-align: center; }
+        .system-title { font-size: 28px; font-weight: 900; color: #047857; margin-bottom: 5px; letter-spacing: -1px; }
+        .system-subtitle { font-size: 14px; color: #10b981; font-weight: bold; margin-bottom: 25px; letter-spacing: 1px; }
+        
+        #erp-main-content { display: none; max-width: 1400px; margin: 0 auto; }
+        .erp-header { background: #047857; color: white; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .erp-header h1 { margin: 0; font-size: 22px; font-weight: bold; }
+        .btn-logout { background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px; }
+        
+        .erp-nav { display: flex; gap: 8px; background: #e2e8f0; padding: 8px; border-radius: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+        .nav-item { padding: 10px 14px; background: white; border-radius: 6px; font-weight: bold; font-size: 14px; color: #475569; cursor: pointer; border: 1px solid #cbd5e1; transition: all 0.2s; }
+        .nav-item.active { background: #047857; color: white; border-color: #047857; }
+        
+        .erp-sub-nav { display: none; gap: 8px; background: #cbd5e1; padding: 6px; border-radius: 6px; margin-bottom: 20px; flex-wrap: wrap; }
+        .sub-nav-item { padding: 8px 14px; background: #f8fafc; border-radius: 4px; font-weight: bold; font-size: 13px; color: #334155; cursor: pointer; border: 1px solid #94a3b8; transition: 0.2s; }
+        .sub-nav-item.active { background: #10b981; color: white; border-color: #10b981; }
+        .sub-nav-divider { width: 2px; background: #94a3b8; margin: 0 5px; }
+
+        .dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 768px) { .dashboard-grid { grid-template-columns: 1fr; } }
+        
+        .erp-section { display: none; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .card-title { font-size: 16px; font-weight: bold; color: #047857; margin-bottom: 15px; border-left: 4px solid #10b981; padding-left: 8px; }
+        
+        .table-wrapper { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 6px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 600px; }
+        th, td { border-bottom: 1px solid #e2e8f0; padding: 10px 12px; text-align: left; }
+        th { background-color: #f8fafc; color: #64748b; font-weight: bold; }
+        tr:hover { background-color: #f1f5f9; }
+        .text-right { text-align: right; }
+        
+        .form-control { display: flex; flex-direction: column; margin-bottom: 15px; }
+        .form-control label { font-size: 12px; color: #64748b; margin-bottom: 6px; font-weight: bold; }
+        .form-control input, .form-control select { padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box; width: 100%; }
+        .form-control input:focus, .form-control select:focus { border-color: #10b981; outline: none; box-shadow: 0 0 0 3px rgba(16,185,129,0.1); }
+        
+        .btn-submit { background-color: #047857; color: white; border: none; padding: 12px; width: 100%; border-radius: 6px; cursor: pointer; font-weight: bold; margin-top: 10px; font-size: 14px; transition: 0.2s; }
+        .btn-submit:hover { background-color: #065f46; }
+        .btn-danger { background-color: #ef4444; padding: 4px 8px; font-size: 11px; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div id="login-section" class="login-wrapper">
+        <div class="login-card">
+            <div class="system-title">JW 장운산업</div>
+            <div class="system-subtitle">5공장 현장 관리 시스템</div>
+            <form id="loginForm">
+                <div class="form-control" style="text-align: left;">
+                    <label>사용자 아이디 (ID)</label>
+                    <input type="text" id="userId" placeholder="예: admin" required>
+                </div>
+                <div class="form-control" style="text-align: left;">
+                    <label>비밀번호 (Password)</label>
+                    <input type="password" id="userPw" value="1234" required>
+                </div>
+                <button type="submit" class="btn-submit">현장 로그인</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="erp-main-content">
+        <div class="erp-header">
+            <h1 style="margin:0;">장운산업 5공장 현장 시스템</h1>
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <span id="current-user-badge" style="font-size: 14px; font-weight: bold; background: #10b981; padding: 4px 10px; border-radius: 4px;"></span>
+                <button class="btn-logout" id="btnLogout">로그아웃</button>
+            </div>
+        </div>
+
+        <div class="erp-nav">
+            <div class="nav-item active" id="menu-dash">홈 (공지)</div>
+            <div class="nav-item" id="menu-mat">자재/비품</div>
+            <div class="nav-item" id="menu-prod">사출 생산</div>
+            <div class="nav-item" id="menu-assem">조립 라인</div>
+            <div class="nav-item" id="menu-quality">품질 관리</div>
+        </div>
+
+        <div class="erp-sub-nav" id="matSubNav">
+            <div class="sub-nav-item active" id="sub-mat-stock">실시간 현재고 조회</div>
+            <div class="sub-nav-divider"></div>
+            <div class="sub-nav-item" id="sub-equip-reg">5공장 비품 매입 등록</div>
+        </div>
+        <div class="erp-sub-nav" id="prodSubNav">
+            <div class="sub-nav-item active" id="sub-prod-report">사출 생산일보 등록</div>
+            <div class="sub-nav-item" id="sub-prod-loss">사출 설비유실 등록</div>
+            <div class="sub-nav-divider"></div>
+            <div class="sub-nav-item" id="sub-prod-mold">금형 이력 관리</div>
+        </div>
+        <div class="erp-sub-nav" id="assemSubNav">
+            <div class="sub-nav-item active" id="sub-ka4-prod">KA4 생산등록</div>
+            <div class="sub-nav-item" id="sub-ka4-loss">KA4 유실등록</div>
+            <div class="sub-nav-divider"></div>
+            <div class="sub-nav-item" id="sub-ybpe-prod">YB PE 생산등록</div>
+            <div class="sub-nav-item" id="sub-ybpe-loss">YB PE 유실등록</div>
+        </div>
+        <div class="erp-sub-nav" id="qualitySubNav">
+            <div class="sub-nav-item active" id="sub-qual-proc">사출/조립 공정검사 등록</div>
+        </div>
+
+        <div id="section-dash" class="erp-section" style="display:block;">
+            <div class="card">
+                <div class="card-title">📌 5공장 현장 공지사항 및 이슈</div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead><tr><th>날짜</th><th>내용</th><th>작성자</th></tr></thead>
+                        <tbody id="homeNoticeBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="section-mat-stock" class="erp-section">
+            <div class="card">
+                <div class="card-title">원재료/자재 실시간 창고 재고 현황</div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead><tr><th>품번</th><th>품명</th><th>분류</th><th class="text-right">현재고 실적</th></tr></thead>
+                        <tbody id="stockTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div id="section-equip-reg" class="erp-section">
+            <div class="dashboard-grid">
+                <div class="card">
+                    <div class="card-title">5공장 비품 매입 등록</div>
+                    <form id="equipForm">
+                        <div style="display:flex; gap:10px;">
+                            <div class="form-control" style="flex:1;">
+                                <label>매입 공장 (고정)</label>
+                                <input type="text" id="eqFactory" value="5공장" readonly style="background:#e2e8f0; font-weight:bold; color:#047857;">
+                            </div>
+                            <div class="form-control" style="flex:1;"><label>사용 부서</label><select id="eqDept"><option value="사출">사출</option><option value="조립">조립</option><option value="품질">품질</option></select></div>
+                        </div>
+                        <div class="form-control"><label>비품명 / 검색</label><input type="text" id="eqItemInput" list="itemDatalist" required autocomplete="off"></div>
+                        <div style="display:flex; gap:10px;">
+                            <div class="form-control" style="flex:1;"><label>단가(원)</label><input type="number" id="eqPrice" value="0"></div>
+                            <div class="form-control" style="flex:1;"><label>수량</label><input type="number" id="eqQty" value="1" required></div>
+                        </div>
+                        <div class="form-control"><label>구입 일자</label><input type="date" id="eqDate" required></div>
+                        <button type="submit" class="btn-submit">비품 등록</button>
+                    </form>
+                </div>
+                <div class="card">
+                    <div class="card-title">5공장 비품 구매 내역</div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>일자</th><th>사용부서</th><th>품목명</th><th class="text-right">총액</th><th>관리</th></tr></thead>
+                            <tbody id="equipTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="section-prod-report" class="erp-section">
+            <div class="dashboard-grid">
+                <div class="card">
+                    <div class="card-title">사출 생산일보 등록</div>
+                    <form id="reportForm">
+                        <div style="display:flex; gap:10px;">
+                            <div class="form-control" style="flex:1;"><label>생산 일자</label><input type="date" id="reportDate" required></div>
+                            <div class="form-control" style="flex:1;"><label>생산 사출기</label><select id="reportMachine"><option value="사출기 1호">사출기 1호</option><option value="사출기 2호">사출기 2호</option></select></div>
+                        </div>
+                        <div class="form-control"><label>생산 품번 검색</label><input type="text" id="reportItemInput" list="itemDatalist" required autocomplete="off"></div>
+                        <div style="display:flex; gap:10px;">
+                            <div class="form-control" style="flex:1;"><label>총 생산량</label><input type="number" id="reportQty" required></div>
+                            <div class="form-control" style="flex:1;"><label>불량 수량</label><input type="number" id="reportBadQty" value="0" required></div>
+                            <div class="form-control" style="flex:1;"><label>작업시간(H)</label><input type="number" id="reportWorkHours" step="0.1" required></div>
+                        </div>
+                        <div style="border:1px solid #e2e8f0; padding:10px; background:#f8fafc; border-radius:6px; margin-bottom:12px;">
+                            <div class="form-control"><label>투입 원재료 (재고 차감)</label><input type="text" id="reportUseMat" list="itemDatalist" autocomplete="off" required></div>
+                            <div style="display:flex; gap:10px;">
+                                <div class="form-control" style="flex:1;"><label>원재료 LOT</label><input type="text" id="reportMatLot" required></div>
+                                <div class="form-control" style="flex:1;"><label>투입량(kg)</label><input type="number" id="reportUseMatQty" step="0.01" required></div>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn-submit">생산 실적 전송</button>
+                    </form>
+                </div>
+                <div class="card">
+                    <div class="card-title">오늘의 생산 이력</div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>사출기</th><th>품번</th><th class="text-right">양품</th><th class="text-right">불량</th><th>관리</th></tr></thead>
+                            <tbody id="reportTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="section-prod-loss" class="erp-section">
+            <div class="dashboard-grid">
+                <div class="card">
+                    <div class="card-title">사출 설비 유실 등록</div>
+                    <form id="lossForm">
+                        <div class="form-control"><label>발생 일자</label><input type="date" id="lossDate" required></div>
+                        <div class="form-control"><label>해당 설비</label><select id="lossMachine"><option value="사출기 1호">사출기 1호</option><option value="사출기 2호">사출기 2호</option></select></div>
+                        <div style="display:flex; gap:10px;">
+                            <div class="form-control" style="flex:1;"><label>정지 시간</label><input type="time" id="lossStart" required></div>
+                            <div class="form-control" style="flex:1;"><label>재가동 시간</label><input type="time" id="lossEnd" required></div>
+                        </div>
+                        <div class="form-control"><label>상세 사유</label><input type="text" id="lossReason" required></div>
+                        <button type="submit" class="btn-submit" style="background:#ef4444;">설비정지 기록</button>
+                    </form>
+                </div>
+                <div class="card">
+                    <div class="card-title">설비 유실 이력</div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>날짜</th><th>설비명</th><th>정지~재가동</th><th>사유</th><th>관리</th></tr></thead>
+                            <tbody id="lossTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="section-prod-mold" class="erp-section">
+            <div class="dashboard-grid">
+                <div class="card">
+                    <div class="card-title">금형 이상/조치 이력 보고</div>
+                    <form id="moldForm">
+                        <div class="form-control"><label>작업 일자</label><input type="date" id="moldDate" required></div>
+                        <div class="form-control"><label>금형코드 / 명칭</label><input type="text" id="moldCode" required></div>
+                        <div class="form-control"><label>분류</label><select id="moldType"><option value="수리">수리</option><option value="세척">세척</option><option value="슈트점검">슈트점검</option></select></div>
+                        <div class="form-control"><label>작업 내역</label><input type="text" id="moldNote" required></div>
+                        <button type="submit" class="btn-submit">금형 이력 등록</button>
+                    </form>
+                </div>
+                <div class="card">
+                    <div class="card-title">금형 관리 장부</div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>일자</th><th>금형코드</th><th>분류</th><th>내역</th><th>관리</th></tr></thead>
+                            <tbody id="moldTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="section-ka4-prod" class="erp-section">
+            <div class="dashboard-grid">
+                <div class="card">
+                    <div class="card-title">KA4 생산 실적 등록</div>
+                    <form onsubmit="submitAssemProd(event, 'KA4')">
+                        <div class="form-control"><label>작업 일자</label><input type="date" id="ka4ProdDate" required></div>
+                        <div class="form-control"><label>생산품 검색</label><input type="text" id="ka4ProdInput" list="itemDatalist" required autocomplete="off"></div>
+                        <div style="display:flex; gap:10px;">
+                            <div class="form-control" style="flex:1;"><label>생산 수량(개)</label><input type="number" id="ka4ProdQty" required></div>
+                            <div class="form-control" style="flex:1;"><label>작업시간(H)</label><input type="number" id="ka4ProdWorkHours" step="0.1" required></div>
+                        </div>
+                        <button type="submit" class="btn-submit">KA4 실적 저장</button>
+                    </form>
+                </div>
+                <div class="card"><div class="card-title">KA4 실적 장부</div><div class="table-wrapper"><table><thead><tr><th>작업일자</th><th>생산품</th><th class="text-right">수량</th><th class="text-right">시간(H)</th><th>관리</th></tr></thead><tbody id="ka4ProdTableBody"></tbody></table></div></div>
+            </div>
+        </div>
+        <div id="section-ka4-loss" class="erp-section">
+            <div class="dashboard-grid">
+                <div class="card">
+                    <div class="card-title">KA4 라인 설비 유실 등록</div>
+                    <form onsubmit="submitAssemLoss(event, 'KA4')">
+                        <div class="form-control"><label>일자</label><input type="date" id="ka4LossDate" required></div>
+                        <div style="display:flex; gap:10px;"><div class="form-control" style="flex:1;"><label>정지시간</label><input type="time" id="ka4LossStart" required></div><div class="form-control" style="flex:1;"><label>재가동</label><input type="time" id="ka4LossEnd" required></div></div>
+                        <div class="form-control"><label>상세 사유</label><input type="text" id="ka4LossReason" required></div>
+                        <button type="submit" class="btn-submit" style="background:#ef4444;">유실 등록</button>
+                    </form>
+                </div>
+                <div class="card"><div class="card-title">KA4 유실 이력</div><div class="table-wrapper"><table><thead><tr><th>일자</th><th>정지~재가동</th><th>사유</th><th>관리</th></tr></thead><tbody id="ka4LossTableBody"></tbody></table></div></div>
+            </div>
+        </div>
+
+        <div id="section-ybpe-prod" class="erp-section">
+            <div class="dashboard-grid">
+                <div class="card">
+                    <div class="card-title">YB PE 생산 실적 등록</div>
+                    <form onsubmit="submitAssemProd(event, 'YB PE')">
+                        <div class="form-control"><label>작업 일자</label><input type="date" id="ybpeProdDate" required></div>
+                        <div class="form-control"><label>생산품 검색</label><input type="text" id="ybpeProdInput" list="itemDatalist" required autocomplete="off"></div>
+                        <div style="display:flex; gap:10px;">
+                            <div class="form-control" style="flex:1;"><label>생산 수량(개)</label><input type="number" id="ybpeProdQty" required></div>
+                            <div class="form-control" style="flex:1;"><label>작업시간(H)</label><input type="number" id="ybpeProdWorkHours" step="0.1" required></div>
+                        </div>
+                        <button type="submit" class="btn-submit">YB PE 실적 저장</button>
+                    </form>
+                </div>
+                <div class="card"><div class="card-title">YB PE 실적 장부</div><div class="table-wrapper"><table><thead><tr><th>작업일자</th><th>생산품</th><th class="text-right">수량</th><th class="text-right">시간(H)</th><th>관리</th></tr></thead><tbody id="ybpeProdTableBody"></tbody></table></div></div>
+            </div>
+        </div>
+        <div id="section-ybpe-loss" class="erp-section">
+            <div class="dashboard-grid">
+                <div class="card">
+                    <div class="card-title">YB PE 라인 설비 유실 등록</div>
+                    <form onsubmit="submitAssemLoss(event, 'YB PE')">
+                        <div class="form-control"><label>일자</label><input type="date" id="ybpeLossDate" required></div>
+                        <div style="display:flex; gap:10px;"><div class="form-control" style="flex:1;"><label>정지시간</label><input type="time" id="ybpeLossStart" required></div><div class="form-control" style="flex:1;"><label>재가동</label><input type="time" id="ybpeLossEnd" required></div></div>
+                        <div class="form-control"><label>상세 사유</label><input type="text" id="ybpeLossReason" required></div>
+                        <button type="submit" class="btn-submit" style="background:#ef4444;">유실 등록</button>
+                    </form>
+                </div>
+                <div class="card"><div class="card-title">YB PE 유실 이력</div><div class="table-wrapper"><table><thead><tr><th>일자</th><th>정지~재가동</th><th>사유</th><th>관리</th></tr></thead><tbody id="ybpeLossTableBody"></tbody></table></div></div>
+            </div>
+        </div>
+
+        <div id="section-qual-proc" class="erp-section">
+            <div class="dashboard-grid">
+                <div class="card">
+                    <div class="card-title">사출/조립 공정검사일보 등록</div>
+                    <form id="qualProcForm">
+                        <div class="form-control"><label>검사 일자</label><input type="date" id="qProcDate" required></div>
+                        <div class="form-control"><label>대상 라인</label><select id="qProcLine"><option value="5공장 사출">5공장 사출</option><option value="5공장 조립(KA4)">5공장 조립(KA4)</option><option value="5공장 조립(YB PE)">5공장 조립(YB PE)</option></select></div>
+                        <div class="form-control"><label>품목 검색</label><input type="text" id="qProcItem" list="itemDatalist" required autocomplete="off"></div>
+                        <div style="display:flex; gap:10px;">
+                            <div class="form-control" style="flex:1;"><label>검사수량</label><input type="number" id="qProcCheckQty" required></div>
+                            <div class="form-control" style="flex:1;"><label>불량수량</label><input type="number" id="qProcBadQty" value="0"></div>
+                        </div>
+                        <div class="form-control"><label>판정</label><select id="qProcResult"><option value="합격">✅ 합격</option><option value="불합격">❌ 불합격</option></select></div>
+                        <div class="form-control"><label>불량내용 및 조치</label><input type="text" id="qProcNote"></div>
+                        <button type="submit" class="btn-submit" style="background:#10b981;">공정검사 기록 완료</button>
+                    </form>
+                </div>
+                <div class="card">
+                    <div class="card-title">공정검사 이력 장부</div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>검사일</th><th>공정</th><th>품목</th><th>판정</th><th>관리</th></tr></thead>
+                            <tbody id="qProcTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <datalist id="itemDatalist"></datalist>
+
+    <script>
+        // 🔥 파이어베이스 메인 장부 연결 코어 (장운산업 공용)
+        const firebaseConfig = {
+            apiKey: "AIzaSyB6VKMKo8-Q08cOB_znifREfGPgqFVoAJ4",
+            authDomain: "jangwoon-ef9cc.firebaseapp.com",
+            databaseURL: "https://jangwoon-ef9cc-default-rtdb.firebaseio.com",
+            projectId: "jangwoon-ef9cc",
+            storageBucket: "jangwoon-ef9cc.firebasestorage.app",
+            messagingSenderId: "956380401892",
+            appId: "1:956380401892:web:9865061748d5ba1ca01cf1"
+        };
+        firebase.initializeApp(firebaseConfig); const db = firebase.database();
+        const saveData = (key, data) => { localStorage.setItem(key, JSON.stringify(data)); db.ref(key).set(data); };
+
+        document.addEventListener("DOMContentLoaded", function() {
+            const getToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+            document.querySelectorAll("input[type='date']").forEach(input => { input.value = getToday(); });
+
+            // 공용 데이터 저장소 변수
+            let defaultItems = [], empMasterData = [], noticeData = [];
+            let equipData = [], reportData = [], prodLossData = [], moldData = [];
+            let assemProdData = { "KA4": [], "YB PE": [] };
+            let assemLossData = { "KA4": [], "YB PE": [] };
+            let qualProcData = [];
+            let loggedInUser = null;
+
+            // 1. 파이어베이스 데이터 로드
+            db.ref().once('value').then(snap => {
+                const d = snap.val() || {};
+                defaultItems = d.erpItems || []; empMasterData = d.erpEmployees || [];
+                noticeData = d.erpIssues || []; // 이슈 장부를 공지로 활용
+                equipData = d.erpEquip || [];
+                reportData = d.erpReports || []; prodLossData = d.erpProdLoss || [];
+                moldData = d.erpMold || []; // 통합 금형 이력
+                if(d.erpAssemProd) assemProdData = d.erpAssemProd;
+                if(d.erpAssemLoss) assemLossData = d.erpAssemLoss;
+                qualProcData = d.erpQualProcess || [];
+
+                // 품목 자동완성 세팅
+                const itemDl = document.getElementById("itemDatalist"); itemDl.innerHTML = "";
+                defaultItems.forEach(i => itemDl.innerHTML += `<option value="${i.id} (${i.name})">`);
+
+                renderAllTables();
+            });
+
+            // 2. 로그인 (튕김 방지)
+            document.getElementById("loginForm").addEventListener("submit", function(e) {
+                e.preventDefault();
+                const uid = document.getElementById("userId").value;
+                const upw = document.getElementById("userPw").value;
+
+                if ((uid === "admin" && upw === "1234") || empMasterData.find(e => e.id === uid && upw === "1234")) {
+                    const user = empMasterData.find(e => e.id === uid);
+                    loggedInUser = user || { id: "admin", name: "최고관리자", dept: "관리" };
+                    
+                    document.getElementById("login-section").style.display = "none";
+                    document.getElementById("erp-main-content").style.display = "block";
+                    document.getElementById("current-user-badge").innerText = `[${loggedInUser.dept}] ${loggedInUser.name}`;
+                    renderAllTables();
+                } else { alert("사원 아이디 또는 비밀번호가 틀렸습니다."); }
+            });
+            document.getElementById("btnLogout").addEventListener("click", () => location.reload());
+
+            // 3. 네비게이션 제어
+            const mainMenus = ['menu-dash', 'menu-mat', 'menu-prod', 'menu-assem', 'menu-quality'];
+            mainMenus.forEach(menuId => {
+                document.getElementById(menuId).addEventListener("click", function() {
+                    document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+                    this.classList.add("active");
+                    
+                    document.querySelectorAll(".erp-sub-nav").forEach(s => s.style.display = "none");
+                    document.querySelectorAll(".erp-section").forEach(s => s.style.display = "none");
+                    
+                    const type = menuId.split('-')[1];
+                    const subNav = document.getElementById(`${type}SubNav`);
+                    
+                    if(subNav) {
+                        subNav.style.display = "flex";
+                        subNav.querySelector('.sub-nav-item').click();
+                    } else {
+                        document.getElementById(`section-${type}`).style.display = "block";
+                    }
+                });
+            });
+
+            document.querySelectorAll('.sub-nav-item').forEach(item => {
+                item.addEventListener("click", function() {
+                    this.parentNode.querySelectorAll('.sub-nav-item').forEach(i => i.classList.remove("active"));
+                    this.classList.add("active");
+                    document.querySelectorAll(".erp-section").forEach(s => s.style.display = "none");
+                    document.getElementById(this.id.replace('sub-', 'section-')).style.display = "block";
+                });
+            });
+
+            // 4. 폼 제출 로직들 (e.preventDefault 적용)
+
+            // 비품 등록
+            document.getElementById("equipForm").addEventListener("submit", function(e) {
+                e.preventDefault();
+                equipData.push({ id: Date.now(), factory: "5공장", dept: document.getElementById("eqDept").value, item: document.getElementById("eqItemInput").value, price: parseInt(document.getElementById("eqPrice").value)||0, qty: parseInt(document.getElementById("eqQty").value)||1, date: document.getElementById("eqDate").value });
+                saveData('erpEquip', equipData); alert("비품이 등록되었습니다."); this.reset(); document.getElementById("eqFactory").value="5공장"; renderAllTables();
+            });
+
+            // 사출 생산일보
+            document.getElementById("reportForm").addEventListener("submit", function(e) {
+                e.preventDefault();
+                reportData.push({ id: Date.now(), date: document.getElementById("reportDate").value, machine: document.getElementById("reportMachine").value, item: document.getElementById("reportItemInput").value, qty: parseInt(document.getElementById("reportQty").value), badQty: parseInt(document.getElementById("reportBadQty").value) || 0, useMat: document.getElementById("reportUseMat").value, useMatQty: document.getElementById("reportUseMatQty").value });
+                saveData('erpReports', reportData); alert("생산 실적이 전송되었습니다."); this.reset(); renderAllTables();
+            });
+
+            // 사출 유실
+            document.getElementById("lossForm").addEventListener("submit", function(e) {
+                e.preventDefault();
+                prodLossData.push({ id: Date.now(), date: document.getElementById("lossDate").value, machine: document.getElementById("lossMachine").value, start: document.getElementById("lossStart").value, end: document.getElementById("lossEnd").value, reason: document.getElementById("lossReason").value });
+                saveData('erpProdLoss', prodLossData); alert("설비 유실이 기록되었습니다."); this.reset(); renderAllTables();
+            });
+
+            // 금형
+            document.getElementById("moldForm").addEventListener("submit", function(e) {
+                e.preventDefault();
+                moldData.push({ id: Date.now(), date: document.getElementById("moldDate").value, code: document.getElementById("moldCode").value, type: document.getElementById("moldType").value, note: document.getElementById("moldNote").value });
+                saveData('erpMold', moldData); alert("금형 이력이 등록되었습니다."); this.reset(); renderAllTables();
+            });
+
+            // 조립 생산
+            window.submitAssemProd = function(event, line) {
+                event.preventDefault(); const p = line === 'KA4' ? 'ka4' : 'ybpe';
+                assemProdData[line].push({ id: Date.now(), date: document.getElementById(`${p}ProdDate`).value, item: document.getElementById(`${p}ProdInput`).value, qty: document.getElementById(`${p}ProdQty`).value, hours: document.getElementById(`${p}ProdWorkHours`).value });
+                saveData('erpAssemProd', assemProdData); alert(`${line} 생산 실적이 등록되었습니다.`); document.getElementById(`${p}ProdInput`).value = ""; document.getElementById(`${p}ProdQty`).value = ""; renderAllTables();
+            };
+
+            // 조립 유실
+            window.submitAssemLoss = function(event, line) {
+                event.preventDefault(); const p = line === 'KA4' ? 'ka4' : 'ybpe';
+                assemLossData[line].push({ id: Date.now(), date: document.getElementById(`${p}LossDate`).value, start: document.getElementById(`${p}LossStart`).value, end: document.getElementById(`${p}LossEnd`).value, reason: document.getElementById(`${p}LossReason`).value });
+                saveData('erpAssemLoss', assemLossData); alert(`${line} 유실이 등록되었습니다.`); event.target.reset(); renderAllTables();
+            };
+
+            // 공정검사
+            document.getElementById("qualProcForm").addEventListener("submit", function(e) {
+                e.preventDefault();
+                qualProcData.push({ id: Date.now(), date: document.getElementById("qProcDate").value, line: document.getElementById("qProcLine").value, item: document.getElementById("qProcItem").value, result: document.getElementById("qProcResult").value });
+                saveData('erpQualProcess', qualProcData); alert("공정검사 결과가 등록되었습니다."); this.reset(); renderAllTables();
+            });
+
+            // 🗑️ 삭제 로직 (현장 권한 보호를 위해 id 기반 삭제)
+            window.deleteLog = function(category, id, line) {
+                if(!confirm("해당 기록을 지우시겠습니까?")) return;
+                if(category === 'equip') { equipData = equipData.filter(d => d.id !== id); saveData('erpEquip', equipData); }
+                if(category === 'report') { reportData = reportData.filter(d => d.id !== id); saveData('erpReports', reportData); }
+                if(category === 'loss') { prodLossData = prodLossData.filter(d => d.id !== id); saveData('erpProdLoss', prodLossData); }
+                if(category === 'mold') { moldData = moldData.filter(d => d.id !== id); saveData('erpMold', moldData); }
+                if(category === 'assemProd') { assemProdData[line] = assemProdData[line].filter(d => d.id !== id); saveData('erpAssemProd', assemProdData); }
+                if(category === 'assemLoss') { assemLossData[line] = assemLossData[line].filter(d => d.id !== id); saveData('erpAssemLoss', assemLossData); }
+                if(category === 'qualProc') { qualProcData = qualProcData.filter(d => d.id !== id); saveData('erpQualProcess', qualProcData); }
+                renderAllTables();
+            }
+
+            // 📊 테이블 렌더링
+            function renderAllTables() {
+                // 홈 공지
+                const noticeBody = document.getElementById("homeNoticeBody"); if(noticeBody) { noticeBody.innerHTML = ""; noticeData.slice(-5).reverse().forEach(n => noticeBody.innerHTML += `<tr><td>${n.date}</td><td style="color:${n.color||'#0f172a'}; font-weight:bold;">${n.content||n.title}</td><td>${n.author||'관리자'}</td></tr>`); }
+                // 재고
+                const stockBody = document.getElementById("stockTableBody"); if(stockBody) { stockBody.innerHTML = ""; defaultItems.forEach(i => { if(i.type !== '비품') stockBody.innerHTML += `<tr><td>${i.id}</td><td>${i.name}</td><td>${i.type}</td><td class="text-right" style="color:#047857; font-weight:bold;">조회필요</td></tr>`; }); }
+                // 비품
+                const eqBody = document.getElementById("equipTableBody"); if(eqBody) { eqBody.innerHTML = ""; equipData.filter(e => e.factory === '5공장').reverse().forEach(e => eqBody.innerHTML += `<tr><td>${e.date}</td><td>${e.dept}</td><td>${e.item}</td><td class="text-right">${(e.price*e.qty).toLocaleString()}원</td><td><button class="btn-danger" onclick="deleteLog('equip', ${e.id})">삭제</button></td></tr>`); }
+                // 생산일보
+                const repBody = document.getElementById("reportTableBody"); if(repBody) { repBody.innerHTML = ""; reportData.reverse().forEach(r => repBody.innerHTML += `<tr><td>${r.machine}</td><td>${r.item}</td><td class="text-right">${r.qty - r.badQty}</td><td class="text-right" style="color:red;">${r.badQty}</td><td><button class="btn-danger" onclick="deleteLog('report', ${r.id})">삭제</button></td></tr>`); }
+                // 사출 유실
+                const lossBody = document.getElementById("lossTableBody"); if(lossBody) { lossBody.innerHTML = ""; prodLossData.reverse().forEach(l => lossBody.innerHTML += `<tr><td>${l.date}</td><td>${l.machine}</td><td>${l.start}~${l.end}</td><td>${l.reason}</td><td><button class="btn-danger" onclick="deleteLog('loss', ${l.id})">삭제</button></td></tr>`); }
+                // 금형
+                const moldBody = document.getElementById("moldTableBody"); if(moldBody) { moldBody.innerHTML = ""; moldData.reverse().forEach(m => moldBody.innerHTML += `<tr><td>${m.date}</td><td><strong>${m.code}</strong></td><td>${m.type}</td><td>${m.note}</td><td><button class="btn-danger" onclick="deleteLog('mold', ${m.id})">삭제</button></td></tr>`); }
+                
+                // 조립 (KA4 / YBPE)
+                ['KA4', 'YB PE'].forEach(line => {
+                    const p = line === 'KA4' ? 'ka4' : 'ybpe';
+                    const prodBody = document.getElementById(`${p}ProdTableBody`); if(prodBody) { prodBody.innerHTML = ""; assemProdData[line].reverse().forEach(d => prodBody.innerHTML += `<tr><td>${d.date}</td><td>${d.item}</td><td class="text-right">${d.qty}</td><td class="text-right">${d.hours}</td><td><button class="btn-danger" onclick="deleteLog('assemProd', ${d.id}, '${line}')">삭제</button></td></tr>`); }
+                    const lossBody = document.getElementById(`${p}LossTableBody`); if(lossBody) { lossBody.innerHTML = ""; assemLossData[line].reverse().forEach(d => lossBody.innerHTML += `<tr><td>${d.date}</td><td>${d.start}~${d.end}</td><td>${d.reason}</td><td><button class="btn-danger" onclick="deleteLog('assemLoss', ${d.id}, '${line}')">삭제</button></td></tr>`); }
+                });
+
+                // 공정검사
+                const qualBody = document.getElementById("qProcTableBody"); if(qualBody) { qualBody.innerHTML = ""; qualProcData.reverse().forEach(q => { let c = q.result==='합격'?'#10b981':'#ef4444'; qualBody.innerHTML += `<tr><td>${q.date}</td><td>${q.line}</td><td>${q.item}</td><td style="color:${c}; font-weight:bold;">${q.result}</td><td><button class="btn-danger" onclick="deleteLog('qualProc', ${q.id})">삭제</button></td></tr>`; }); }
+            }
+        });
+    </script>
+</body>
+</html>
